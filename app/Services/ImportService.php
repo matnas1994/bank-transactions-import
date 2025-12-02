@@ -8,6 +8,7 @@ use App\Models\Import;
 use App\Repositories\ImportRepositoryInterface;
 use App\Repositories\TransactionRepositoryInterface;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 class ImportService implements ImportContact
@@ -25,16 +26,25 @@ class ImportService implements ImportContact
 
         $status = $this->determineStatus($totalRecords, $successfulRecords);
 
-        $import = $this->importRepository->createImport([
-            'file_name' => $fileName,
-            'total_records' => $totalRecords,
-            'successful_records' => $successfulRecords,
-            'failed_records' => $failedRecords,
-            'status' => $status,
-            'created_at' => now(),
-        ], $errors);
+        try {
+            DB::beginTransaction();
 
-        $this->transactionRepository->insert($transactions);
+            $import = $this->importRepository->createImport([
+                'file_name' => $fileName,
+                'total_records' => $totalRecords,
+                'successful_records' => $successfulRecords,
+                'failed_records' => $failedRecords,
+                'status' => $status,
+                'created_at' => now(),
+            ], $errors);
+
+            $this->transactionRepository->insert($transactions);
+
+            DB::commit();
+        }catch (\Throwable $ex) {
+            DB::rollBack();
+            throw $ex;
+        }
 
         return $import;
     }
